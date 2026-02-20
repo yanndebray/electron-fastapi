@@ -9,8 +9,9 @@ permissions:
   contents: write  # needed for creating releases
 
 env:
-  PYTHON_VERSION: "3.12"
-  PBS_RELEASE: "20241101"
+  PYTHON_VERSION: "3.12.12"
+  PYTHON_MINOR: "3.12"  # for stdlib paths like lib/python3.12
+  PBS_RELEASE: "20260211"
   NODE_VERSION: "20"
 
 jobs:
@@ -22,12 +23,6 @@ jobs:
           - os: ubuntu-latest
             target: linux-x86_64
             pbs_triple: x86_64-unknown-linux-gnu
-            electron_arch: x64
-            python_bin: python-runtime/bin/python3
-
-          - os: macos-13        # Intel
-            target: darwin-x86_64
-            pbs_triple: x86_64-apple-darwin
             electron_arch: x64
             python_bin: python-runtime/bin/python3
 
@@ -104,7 +99,7 @@ jobs:
           find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
           # Remove large unused stdlib modules
-          PYLIB="python-runtime/lib/python${{ env.PYTHON_VERSION }}"
+          PYLIB="python-runtime/lib/python${{ env.PYTHON_MINOR }}"
           if [ -d "$PYLIB" ]; then
             rm -rf "$PYLIB/tkinter" "$PYLIB/turtle"* "$PYLIB/idlelib" "$PYLIB/ensurepip"
             rm -rf "$PYLIB/site-packages/pip" "$PYLIB/site-packages/setuptools"
