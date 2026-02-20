@@ -88,6 +88,17 @@ The workflow builds for:
 
 Artifacts are uploaded to the GitHub Release automatically.
 
+### macOS: Gatekeeper notice
+
+The CI-built `.dmg` is ad-hoc signed but not notarized with Apple, so macOS
+will block it on first launch. After copying the app to `/Applications`, run:
+
+```bash
+xattr -cr "/Applications/My Desktop App.app"
+```
+
+Then open the app normally. This only needs to be done once.
+
 ## How the Bundling Works
 
 1. **python-build-standalone** provides a pre-built, self-contained Python
