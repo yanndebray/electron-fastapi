@@ -1,0 +1,169 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed for creating releases
+
+env:
+  PYTHON_VERSION: "3.12"
+  PBS_RELEASE: "20241101"
+  NODE_VERSION: "20"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            pbs_triple: x86_64-unknown-linux-gnu
+            electron_arch: x64
+            python_bin: python-runtime/bin/python3
+
+          - os: macos-13        # Intel
+            target: darwin-x86_64
+            pbs_triple: x86_64-apple-darwin
+            electron_arch: x64
+            python_bin: python-runtime/bin/python3
+
+          - os: macos-latest    # Apple Silicon
+            target: darwin-aarch64
+            pbs_triple: aarch64-apple-darwin
+            electron_arch: arm64
+            python_bin: python-runtime/bin/python3
+
+          - os: windows-latest
+            target: windows-x86_64
+            pbs_triple: x86_64-pc-windows-msvc
+            electron_arch: x64
+            python_bin: python-runtime/python.exe
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.target }})
+
+    steps:
+      # ── checkout ───────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── install uv ────────────────────────────────────────────
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      # ── install Node.js ───────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ── download python-build-standalone ──────────────────────
+      - name: Download python-build-standalone
+        shell: bash
+        run: |
+          PBS_FILENAME="cpython-${{ env.PYTHON_VERSION }}+${{ env.PBS_RELEASE }}-${{ matrix.pbs_triple }}-install_only_stripped.tar.gz"
+          PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${{ env.PBS_RELEASE }}/${PBS_FILENAME}"
+
+          echo "Downloading: $PBS_URL"
+          curl -L --fail -o "/tmp/${PBS_FILENAME}" "$PBS_URL"
+
+          mkdir -p build/bundle/python-runtime
+          tar -xf "/tmp/${PBS_FILENAME}" -C build/bundle/python-runtime --strip-components=1
+
+      # ── install Python dependencies ───────────────────────────
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          # Use uv to resolve and install deps into a flat site-packages dir
+          mkdir -p build/bundle/python-venv/site-packages
+
+          # Generate a locked requirements file from pyproject.toml
+          cd backend
+          uv pip compile pyproject.toml -o /tmp/requirements.txt
+          cd ..
+
+          # Install into the target directory using uv pip
+          uv pip install \
+            --python "build/bundle/${{ matrix.python_bin }}" \
+            -r /tmp/requirements.txt \
+            --target build/bundle/python-venv/site-packages
+
+      # ── prune unnecessary files ───────────────────────────────
+      - name: Prune bundle
+        shell: bash
+        run: |
+          cd build/bundle
+          find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+          # Remove large unused stdlib modules
+          PYLIB="python-runtime/lib/python${{ env.PYTHON_VERSION }}"
+          if [ -d "$PYLIB" ]; then
+            rm -rf "$PYLIB/tkinter" "$PYLIB/turtle"* "$PYLIB/idlelib" "$PYLIB/ensurepip"
+            rm -rf "$PYLIB/site-packages/pip" "$PYLIB/site-packages/setuptools"
+          fi
+
+          echo "Bundle size:"
+          du -sh python-runtime python-venv .
+
+      # ── make python executable (unix) ─────────────────────────
+      - name: Fix permissions
+        if: runner.os != 'Windows'
+        run: chmod +x "build/bundle/${{ matrix.python_bin }}"
+
+      # ── install Electron deps & build ─────────────────────────
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: frontend
+        shell: bash
+        env:
+          # electron-builder code-signing (optional, configure secrets)
+          # CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+          # CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx electron-builder \
+            --${{ runner.os == 'Windows' && 'win' || runner.os == 'macOS' && 'mac' || 'linux' }} \
+            --${{ matrix.electron_arch }} \
+            --publish never
+
+      # ── upload artifacts ──────────────────────────────────────
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.target }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.zip
+          if-no-files-found: error
+
+  # ── create GitHub release ───────────────────────────────────
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

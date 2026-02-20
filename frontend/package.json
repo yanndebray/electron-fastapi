@@ -1,0 +1,49 @@
+{
+  "name": "my-desktop-app",
+  "version": "0.1.0",
+  "description": "Electron + FastAPI desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.myapp.desktop",
+    "productName": "My Desktop App",
+    "directories": {
+      "output": "../dist"
+    },
+    "extraResources": [
+      {
+        "from": "../build/bundle/python-runtime",
+        "to": "python-runtime"
+      },
+      {
+        "from": "../build/bundle/python-venv",
+        "to": "python-venv"
+      },
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": ["**/*.py"]
+      }
+    ],
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility"
+    }
+  }
+}
