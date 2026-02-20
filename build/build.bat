@@ -4,8 +4,8 @@ REM Downloads python-build-standalone and creates the bundled environment.
 
 setlocal enabledelayedexpansion
 
-set PYTHON_VERSION=3.12
-set PBS_RELEASE=20241101
+set PYTHON_VERSION=3.12.12
+set PBS_RELEASE=20260211
 set PBS_TRIPLE=x86_64-pc-windows-msvc
 
 set SCRIPT_DIR=%~dp0

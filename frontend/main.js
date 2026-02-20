@@ -24,7 +24,7 @@ function getFreePort() {
 function getPythonPath() {
   const resourcesPath = app.isPackaged
     ? process.resourcesPath
-    : path.join(__dirname, "..");
+    : path.join(__dirname, "..", "build", "bundle");
 
   const pythonDir = path.join(resourcesPath, "python-runtime");
 
@@ -41,6 +41,7 @@ function getPythonPath() {
 
 /** Resolve the path to the backend app. */
 function getBackendPath() {
+  // Backend source lives at project root, not in the bundle
   const resourcesPath = app.isPackaged
     ? process.resourcesPath
     : path.join(__dirname, "..");
@@ -87,13 +88,12 @@ async function startBackend() {
   };
 
   // If we have a bundled venv site-packages, prepend it
-  const resourcesPath = app.isPackaged
+  const bundlePath = app.isPackaged
     ? process.resourcesPath
-    : path.join(__dirname, "..");
-  const sitePackages = path.join(resourcesPath, "python-venv", "lib");
+    : path.join(__dirname, "..", "build", "bundle");
   // On bundled builds, we set PYTHONPATH to include the venv's site-packages
   // The build script flattens it so we can just point at the directory
-  env.PYTHONPATH = path.join(resourcesPath, "python-venv", "site-packages");
+  env.PYTHONPATH = path.join(bundlePath, "python-venv", "site-packages");
 
   console.log(`Starting backend: ${pythonPath} ${backendPath} ${port}`);
 

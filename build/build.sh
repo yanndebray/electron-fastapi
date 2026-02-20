@@ -5,9 +5,10 @@
 set -euo pipefail
 
 # ---------- config ----------
-PYTHON_VERSION="3.12"
+PYTHON_VERSION="3.12.12"
+PYTHON_MINOR="${PYTHON_VERSION%.*}"  # e.g. 3.12 — used for stdlib paths
 # Pin a specific release for reproducibility
-PBS_RELEASE="20241101"
+PBS_RELEASE="20260211"
 UV_VERSION="0.5"  # minimum version
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -96,15 +97,27 @@ fi
 # Use uv if available (much faster), otherwise fall back to pip
 if command -v uv &>/dev/null; then
   echo "    Using uv for dependency installation"
-  
-  # Create a temporary venv using uv, then extract site-packages
+
+  # Compile requirements to a temp file (avoids process substitution issues on MSYS)
+  TEMP_REQUIREMENTS="$BUNDLE_DIR/.tmp-requirements.txt"
+  (cd "$PROJECT_ROOT/backend" && uv pip compile pyproject.toml -o "$TEMP_REQUIREMENTS")
+
+  # Create a temporary venv using uv, then install into target
   TEMP_VENV="$BUNDLE_DIR/.tmp-venv"
   uv venv "$TEMP_VENV" --python "$PYTHON_BIN"
+
+  # On Windows the venv Python is at Scripts/python.exe, not bin/python
+  if [[ "$TARGET" == windows-* ]]; then
+    VENV_PYTHON="$TEMP_VENV/Scripts/python.exe"
+  else
+    VENV_PYTHON="$TEMP_VENV/bin/python"
+  fi
+
   uv pip install \
-    --python "$TEMP_VENV/bin/python" \
-    -r <(cd "$PROJECT_ROOT/backend" && uv pip compile pyproject.toml) \
+    --python "$VENV_PYTHON" \
+    -r "$TEMP_REQUIREMENTS" \
     --target "$BUNDLE_DIR/python-venv/site-packages"
-  rm -rf "$TEMP_VENV"
+  rm -rf "$TEMP_VENV" "$TEMP_REQUIREMENTS"
 else
   echo "    Using pip for dependency installation"
   "$PYTHON_BIN" -m pip install \
@@ -124,14 +137,14 @@ find "$BUNDLE_DIR" -type f -name "*.pyc" -delete 2>/dev/null || true
 find "$BUNDLE_DIR" -type f -name "*.pyo" -delete 2>/dev/null || true
 
 # Remove pip/setuptools from the runtime (not needed at runtime)
-rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_VERSION}/ensurepip"
-rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_VERSION}/site-packages/pip"
-rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_VERSION}/site-packages/setuptools"
+rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_MINOR}/ensurepip"
+rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_MINOR}/site-packages/pip"
+rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_MINOR}/site-packages/setuptools"
 
 # Remove tkinter and other large unused stdlib modules
-rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_VERSION}/tkinter"
-rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_VERSION}/turtle*"
-rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_VERSION}/idlelib"
+rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_MINOR}/tkinter"
+rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_MINOR}/turtle*"
+rm -rf "$BUNDLE_DIR/python-runtime/lib/python${PYTHON_MINOR}/idlelib"
 
 echo "==> Bundle ready at: $BUNDLE_DIR"
 echo "    Python runtime: $BUNDLE_DIR/python-runtime"
