@@ -2,7 +2,7 @@
   "name": "my-desktop-app",
   "version": "0.1.0",
   "description": "Electron + FastAPI desktop app",
-  "author": "Yann Debray",
+  "author": "Yann Debray <yann.debray@gmail.com>",
   "homepage": "https://github.com/yanndebray/electron-fastapi",
   "repository": {
     "type": "git",
