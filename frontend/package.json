@@ -2,6 +2,12 @@
   "name": "my-desktop-app",
   "version": "0.1.0",
   "description": "Electron + FastAPI desktop app",
+  "author": "Yann Debray",
+  "homepage": "https://github.com/yanndebray/electron-fastapi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yanndebray/electron-fastapi.git"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -34,7 +40,7 @@
     ],
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        { "target": "dmg", "arch": ["arm64"] }
       ],
       "category": "public.app-category.developer-tools"
     },
