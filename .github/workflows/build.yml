@@ -132,6 +132,49 @@ jobs:
             --${{ matrix.electron_arch }} \
             --publish never
 
+      # ── ad-hoc codesign + rebuild DMG (macOS) ──────────────────
+      # Without this, Gatekeeper reports the app as "damaged" because
+      # the bundled Python runtime binaries are unsigned, breaking
+      # the bundle's sealed-resource checks.
+      - name: Ad-hoc codesign and repackage DMG
+        if: runner.os == 'macOS'
+        working-directory: frontend
+        run: |
+          APP="../dist/mac-${{ matrix.electron_arch }}/My Desktop App.app"
+
+          # 1. Sign shared libraries and Python extensions (inside-out)
+          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -name "*.node" \) \
+            -exec codesign --force --sign - {} \;
+
+          # 2. Sign the bundled Python interpreter
+          codesign --force --sign - "$APP/Contents/Resources/python-runtime/bin/python3"
+
+          # 3. Sign Electron helper apps (inner bundles before outer)
+          find "$APP/Contents/Frameworks" -depth -name "*.app" \
+            -exec codesign --force --sign - {} \;
+
+          # 4. Sign all frameworks (Electron, Mantle, ReactiveObjC, Squirrel)
+          for fw in "$APP"/Contents/Frameworks/*.framework; do
+            codesign --force --sign - "$fw"
+          done
+
+          # 5. Sign the main app bundle
+          codesign --force --sign - "$APP"
+
+          # Verify
+          codesign --verify --deep --strict "$APP"
+          echo "Ad-hoc codesign verified OK"
+
+          # 6. Rebuild DMG so it contains the signed app
+          rm -f ../dist/*.dmg ../dist/*.blockmap
+          npx electron-builder \
+            --mac dmg \
+            --${{ matrix.electron_arch }} \
+            --pd "../dist/mac-${{ matrix.electron_arch }}" \
+            --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
       # ── upload artifacts ──────────────────────────────────────
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
